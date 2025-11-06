@@ -17,6 +17,9 @@ namespace diplom
         {
             InitializeComponent();
             LoadAvatar();
+            // Keep layout adaptive on resize
+            this.Resize += (_, __) => CenterProfileControls();
+            CenterProfileControls();
         }
 
         public ProfileForm(MainForm owner) : this()
@@ -98,6 +101,36 @@ namespace diplom
             var oldRegion = control.Region;
             control.Region = new Region(path);
             oldRegion?.Dispose();
+        }
+
+        private void CenterProfileControls()
+        {
+            try
+            {
+                // Center avatar horizontally
+                if (avatarBox != null)
+                {
+                    avatarBox.Left = (this.ClientSize.Width - avatarBox.Width) / 2;
+                }
+                // Place login panel under avatar and center it
+                if (loginPanel != null && avatarBox != null)
+                {
+                    loginPanel.Left = (this.ClientSize.Width - loginPanel.Width) / 2;
+                    loginPanel.Top = avatarBox.Bottom + 10;
+                    ApplyRoundedRegion(loginPanel, 12);
+                }
+                // Keep back button top-left and edit icon next to avatar
+                if (pictureBox1 != null)
+                {
+                    pictureBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+                }
+                if (pictureBox2 != null && avatarBox != null)
+                {
+                    pictureBox2.Top = avatarBox.Top + avatarBox.Height - pictureBox2.Height + 10;
+                    pictureBox2.Left = avatarBox.Right + 5;
+                }
+            }
+            catch { }
         }
         
         private void SaveAvatar(Image image)

@@ -137,6 +137,9 @@ namespace diplom
             // Create a task card panel (rounded, with editable text and time)
             CreateTaskCardNearListBox1();
 
+			// Adaptive anchors for main controls
+			ConfigureAnchorsForAdaptiveLayout();
+
 			// Empty state label (centered message when no tasks)
 			emptyStateLabel = new Label();
 			emptyStateLabel.AutoSize = false;
@@ -161,7 +164,47 @@ namespace diplom
 
             // Save tasks on close
             this.FormClosing += MainForm_FormClosing;
+            // Re-layout on resize to keep adaptive positions
+            panel1.Resize += (_, __) =>
+            {
+                // Stretch task panels to panel width
+                if (tasksPanel != null)
+                {
+                    tasksPanel.Width = Math.Max(200, panel1.Width - tasksPanel.Left - 240);
+                }
+                if (weekTasksPanel != null)
+                {
+                    weekTasksPanel.Width = Math.Max(200, panel1.Width - weekTasksPanel.Left - 240);
+                }
+                // Re-apply rounded region for task card panel
+                ApplyRoundedRegion(taskCardPanel, 12);
+                // Re-position week section and re-layout items to new widths
+                UpdateWeekSectionPosition();
+                if (tasksPanel != null) SortAndLayout(tasksPanel, todayTaskItems);
+                if (weekTasksPanel != null) SortAndLayout(weekTasksPanel, weekTaskItems);
+            };
         }
+
+		private void ConfigureAnchorsForAdaptiveLayout()
+		{
+			// Header
+			label1.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+			// Right-side icons
+			pictureBox1.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+			pictureBox2.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+			pictureBox3.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+			// Today section header
+			labelToday.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+			pictureBoxToggle.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+			// Task panels stretch horizontally
+			if (tasksPanel != null) tasksPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+			if (weekTasksPanel != null) weekTasksPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+			// Week section header
+			label2.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+			pictureBox4.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+			// Task card panel stretches
+			if (taskCardPanel != null) taskCardPanel.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+		}
 
 		private void UpdateEmptyStateUI()
 		{

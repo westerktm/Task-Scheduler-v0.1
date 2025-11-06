@@ -23,7 +23,10 @@ namespace diplom
             loginField.PlaceholderText = "Введите логин";
             passField.PlaceholderText = "Введите пароль";
 
-
+            // Adaptive layout
+            ConfigureAnchorsAndResize();
+            this.Resize += (_, __) => ApplyLoginLayout();
+            ApplyLoginLayout();
         }
 
         private void label1_Click(object sender, EventArgs e)
@@ -78,6 +81,34 @@ namespace diplom
             
 
 
+        }
+
+        private void ConfigureAnchorsAndResize()
+        {
+            // Stretch inputs with form width
+            loginField.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            passField.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            buttonLogin.Anchor = AnchorStyles.Top;
+            registerLabel.Anchor = AnchorStyles.Top;
+            pictureBox1.Anchor = AnchorStyles.Top;
+            label1.Anchor = AnchorStyles.Top;
+        }
+
+        private void ApplyLoginLayout()
+        {
+            // Center horizontally for key controls
+            int formWidth = this.ClientSize.Width;
+            void center(Control c)
+            {
+                if (c == null) return;
+                c.Left = Math.Max(12, (formWidth - c.Width) / 2);
+            }
+            center(label1);
+            center(pictureBox1);
+            center(loginField);
+            center(passField);
+            center(buttonLogin);
+            center(registerLabel);
         }
 
         private void label2_Click(object sender, EventArgs e)

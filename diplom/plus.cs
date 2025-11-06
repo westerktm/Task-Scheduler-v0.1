@@ -22,6 +22,17 @@ namespace diplom
             CreateRoundedRectangle();
             InitializeCalendarClick();
             buttonTask.Click += buttonTask_Click;
+
+            // Adaptive anchors
+            panel1.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            zField.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            pictureBox1.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            pictureBox2.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            buttonTask.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+
+            // Resize handler to keep layout centered
+            this.Resize += (_, __) => ApplyPlusLayout();
+            ApplyPlusLayout();
         }
 
         public plus(MainForm owner) : this()
@@ -206,6 +217,19 @@ namespace diplom
             
             // Применяем путь к элементу управления
             control.Region = new Region(path);
+        }
+
+        private void ApplyPlusLayout()
+        {
+            // Stretch panel to form width with margins
+            int margin = 20;
+            panel1.Left = margin;
+            panel1.Width = Math.Max(300, this.ClientSize.Width - margin * 2);
+            // Center action button horizontally at bottom area
+            buttonTask.Left = Math.Max(margin, (this.ClientSize.Width - buttonTask.Width) / 2);
+            // Keep calendar/category icons near panel
+            pictureBox1.Top = panel1.Bottom + 20;
+            pictureBox2.Top = panel1.Bottom + 20;
         }
     }
 }

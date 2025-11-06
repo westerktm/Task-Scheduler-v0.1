@@ -33,16 +33,19 @@
             avatarBox = new PictureBox();
             pictureBox1 = new PictureBox();
             pictureBox2 = new PictureBox();
+            loginPanel = new Panel();
+            loginLabel = new Label();
             ((System.ComponentModel.ISupportInitialize)avatarBox).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).BeginInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).BeginInit();
+            loginPanel.SuspendLayout();
             SuspendLayout();
             // 
             // label1
             // 
             label1.AutoSize = true;
             label1.Font = new Font("Franklin Gothic Medium", 22.2F, FontStyle.Bold, GraphicsUnit.Point, 204);
-            label1.Location = new Point(439, 33);
+            label1.Location = new Point(440, 12);
             label1.Name = "label1";
             label1.Size = new Size(247, 43);
             label1.TabIndex = 0;
@@ -82,11 +85,30 @@
             pictureBox2.TabStop = false;
             pictureBox2.Click += pictureBox2_Click;
             // 
+            // loginPanel
+            // 
+            loginPanel.BackColor = Color.Gainsboro;
+            loginPanel.Controls.Add(loginLabel);
+            loginPanel.Location = new Point(454, 228);
+            loginPanel.Name = "loginPanel";
+            loginPanel.Size = new Size(220, 48);
+            loginPanel.TabIndex = 4;
+            // 
+            // loginLabel
+            // 
+            loginLabel.AutoSize = false;
+            loginLabel.Dock = DockStyle.Fill;
+            loginLabel.Font = new Font("Franklin Gothic Medium", 14F, FontStyle.Bold, GraphicsUnit.Point, 204);
+            loginLabel.TextAlign = ContentAlignment.MiddleCenter;
+            loginLabel.Name = "loginLabel";
+            loginLabel.TabIndex = 0;
+            // 
             // ProfileForm
             // 
             AutoScaleDimensions = new SizeF(8F, 20F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1140, 546);
+            Controls.Add(loginPanel);
             Controls.Add(pictureBox2);
             Controls.Add(pictureBox1);
             Controls.Add(avatarBox);
@@ -97,6 +119,7 @@
             ((System.ComponentModel.ISupportInitialize)avatarBox).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ((System.ComponentModel.ISupportInitialize)pictureBox2).EndInit();
+            loginPanel.ResumeLayout(false);
             ResumeLayout(false);
             PerformLayout();
         }
@@ -107,5 +130,7 @@
         private PictureBox avatarBox;
         private PictureBox pictureBox1;
         private PictureBox pictureBox2;
+        private Panel loginPanel;
+        private Label loginLabel;
     }
 }

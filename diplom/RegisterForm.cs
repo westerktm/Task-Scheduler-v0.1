@@ -29,6 +29,10 @@ namespace diplom
             passField.PlaceholderText = "Введите пароль";
             passField2.PlaceholderText = "Повторите пароль";
 
+            // Adaptive layout
+            ConfigureAnchorsAndResize();
+            this.Resize += (_, __) => ApplyRegisterLayout();
+            ApplyRegisterLayout();
         }
 
         private void label1_Click(object sender, EventArgs e)
@@ -112,6 +116,32 @@ namespace diplom
             loginForm.Show();
         }
 
- 
+        private void ConfigureAnchorsAndResize()
+        {
+            logField.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            passField.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            passField2.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            buttonRegister.Anchor = AnchorStyles.Top;
+            labelLogin.Anchor = AnchorStyles.Top;
+            pictureBox1.Anchor = AnchorStyles.Top;
+            label1.Anchor = AnchorStyles.Top;
+        }
+
+        private void ApplyRegisterLayout()
+        {
+            int formWidth = this.ClientSize.Width;
+            void center(Control c)
+            {
+                if (c == null) return;
+                c.Left = Math.Max(12, (formWidth - c.Width) / 2);
+            }
+            center(label1);
+            center(pictureBox1);
+            center(logField);
+            center(passField);
+            center(passField2);
+            center(buttonRegister);
+            center(labelLogin);
+        }
     }
 }
