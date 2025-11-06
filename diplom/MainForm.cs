@@ -44,11 +44,14 @@ namespace diplom
         private readonly List<TaskRecord> persistedTasks = new();
         private bool isLoadingFromStorage = false;
         private string TasksStoragePath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "diplom", $"tasks_{currentUserId}.json");
+		private readonly ToolTip taskToolTip = new ToolTip();
+		private Label? emptyStateLabel;
 
-        private class TaskRecord
+		private class TaskRecord
         {
             public string Title { get; set; } = string.Empty;
             public DateTime DueAt { get; set; }
+			public bool Completed { get; set; }
         }
 
 		private class TaskItemMeta
@@ -57,6 +60,8 @@ namespace diplom
 			public DateTime DueAt { get; set; }
 			public Label TitleLabel { get; set; } = null!;
 			public Label TimeLabel { get; set; } = null!;
+			public Panel CompleteCircle { get; set; } = null!;
+			public bool Completed { get; set; }
 		}
 
         public MainForm()
@@ -69,6 +74,8 @@ namespace diplom
             InitializeComponent();
             currentUserId = userId;
             currentUserLogin = login;
+			// Tooltips for task actions
+			taskToolTip.ShowAlways = true;
             // Configure animation
             expandTimer.Interval = 15;
             expandTimer.Tick += ExpandTimer_Tick;
@@ -111,6 +118,13 @@ namespace diplom
             weekTasksPanel.Size = new Size(850, 0);
             weekTasksPanel.Visible = false;
             panel1.Controls.Add(weekTasksPanel);
+            
+            // Ensure pictureBox4 is added to panel1 (not clipped by other controls)
+            if (pictureBox4.Parent != panel1)
+            {
+                panel1.Controls.Add(pictureBox4);
+                pictureBox4.BringToFront(); // Ensure it's on top
+            }
 
             // Register for expand/collapse animations
             weekControls.Add(weekTasksPanel);
@@ -123,8 +137,24 @@ namespace diplom
             // Create a task card panel (rounded, with editable text and time)
             CreateTaskCardNearListBox1();
 
+			// Empty state label (centered message when no tasks)
+			emptyStateLabel = new Label();
+			emptyStateLabel.AutoSize = false;
+			// Position to fill the entire panel, text will be centered
+			emptyStateLabel.Location = new Point(0, 0);
+			emptyStateLabel.Size = new Size(panel1.Width, panel1.Height);
+			emptyStateLabel.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
+			emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
+			emptyStateLabel.Font = new Font("Franklin Gothic Medium", 20F, FontStyle.Bold);
+			emptyStateLabel.Text = "Все задачи выполнены";
+			emptyStateLabel.Visible = false;
+			panel1.Controls.Add(emptyStateLabel);
+			emptyStateLabel.SendToBack(); // Keep it behind other controls (header elements will be on top)
+
             // Load tasks from local storage and render
             LoadTasksFromLocal();
+			UpdateWeekSectionPosition(); // Update positions after loading
+			UpdateEmptyStateUI();
 
             // Load user avatar
             LoadUserAvatar();
@@ -132,6 +162,51 @@ namespace diplom
             // Save tasks on close
             this.FormClosing += MainForm_FormClosing;
         }
+
+		private void UpdateEmptyStateUI()
+		{
+			bool hasToday = todayTaskItems.Count > 0;
+			bool hasWeek = weekTaskItems.Count > 0;
+			bool hasAny = hasToday || hasWeek;
+			if (!hasAny)
+			{
+				// Hide task-related elements
+				labelToday.Visible = false;
+				pictureBoxToggle.Visible = false;
+				label2.Visible = false;
+				pictureBox4.Visible = false;
+				if (tasksPanel != null) tasksPanel.Visible = false;
+				if (weekTasksPanel != null) weekTasksPanel.Visible = false;
+				if (taskCardPanel != null) taskCardPanel.Visible = false;
+				
+				// Keep header elements visible (label1, pictureBox1, pictureBox2, pictureBox3)
+				// Show empty state message (it's already positioned below header elements)
+				if (emptyStateLabel != null)
+				{
+					emptyStateLabel.Visible = true;
+				}
+			}
+			else
+			{
+				// Hide empty state message
+				if (emptyStateLabel != null) emptyStateLabel.Visible = false;
+
+				// Determine which sections to show
+				labelToday.Visible = hasToday;
+				pictureBoxToggle.Visible = hasToday;
+				if (tasksPanel != null) tasksPanel.Visible = hasToday && tasksPanel.Controls.Count > 0;
+
+				label2.Visible = hasWeek;
+				pictureBox4.Visible = hasWeek;
+				if (weekTasksPanel != null) weekTasksPanel.Visible = hasWeek && weekTasksPanel.Controls.Count > 0;
+
+				// Show input card only when there is at least one section visible (today or week)
+				if (taskCardPanel != null) taskCardPanel.Visible = hasAny;
+
+				// Reposition week section when today is hidden
+				UpdateWeekSectionPosition();
+			}
+		}
         
         private void LoadUserAvatar()
         {
@@ -336,7 +411,7 @@ namespace diplom
                 Text = title
             };
 
-            var timeLabel = new Label
+			var timeLabel = new Label
             {
                 AutoSize = true,
                 Font = new Font("Franklin Gothic Medium", 14F, FontStyle.Bold),
@@ -346,10 +421,43 @@ namespace diplom
                 Padding = new Padding(0, 0, 8, 0)
             };
 
-            // Добавляем справа сначала время, затем (для недели) дату слева от него
-            itemPanel.Controls.Add(timeLabel);
+			// Completion circle on the right
+			var completeCircle = new Panel
+			{
+				Width = 28,
+				Height = 28,
+				Dock = DockStyle.Right,
+				Cursor = Cursors.Hand,
+				BackColor = Color.Transparent,
+				Margin = new Padding(0)
+			};
+			completeCircle.Paint += (s, e) =>
+			{
+				var meta = (itemPanel.Tag as TaskItemMeta);
+				bool done = meta != null && meta.Completed;
+				e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+				var rect = new Rectangle(2, 2, completeCircle.Width - 4, completeCircle.Height - 4);
+				using var pen = new Pen(done ? Color.Green : Color.DimGray, 2);
+				if (done)
+				{
+					using var brush = new SolidBrush(Color.Green);
+					e.Graphics.FillEllipse(brush, rect);
+					using var innerPen = new Pen(Color.White, 2);
+					// simple check mark
+					e.Graphics.DrawLines(innerPen, new[] { new Point(rect.Left + 5, rect.Top + rect.Height / 2), new Point(rect.Left + 9, rect.Bottom - 6), new Point(rect.Right - 5, rect.Top + 6) });
+				}
+				else
+				{
+					e.Graphics.DrawEllipse(pen, rect);
+				}
+			};
+			completeCircle.Click += (s, e) => ToggleCompleteForPanel(itemPanel);
+			taskToolTip.SetToolTip(completeCircle, "Завершить задачу");
 
-            // Для задач не на сегодня показываем дату рядом со временем
+            // Добавляем справа сначала время, затем (для недели) дату слева от него
+			itemPanel.Controls.Add(timeLabel);
+
+			// Для задач не на сегодня показываем дату рядом со временем
             bool isToday = dateTime.Date == DateTime.Today;
             if (!isToday)
             {
@@ -365,7 +473,10 @@ namespace diplom
                 itemPanel.Controls.Add(dateLabel);
             }
 
-            itemPanel.Controls.Add(titleLabel);
+			// Добавляем круг завершения последним справа, чтобы он оказался правее даты/времени
+			itemPanel.Controls.Add(completeCircle);
+
+			itemPanel.Controls.Add(titleLabel);
 
             // Attach context menu for edit/delete
             var ctx = new ContextMenuStrip();
@@ -378,7 +489,7 @@ namespace diplom
             itemPanel.ContextMenuStrip = ctx;
 
             // Tag metadata
-            itemPanel.Tag = new TaskItemMeta { Title = title, DueAt = dateTime, TitleLabel = titleLabel, TimeLabel = timeLabel };
+			itemPanel.Tag = new TaskItemMeta { Title = title, DueAt = dateTime, TitleLabel = titleLabel, TimeLabel = timeLabel, CompleteCircle = completeCircle, Completed = false };
             isToday = dateTime.Date == DateTime.Today;
             bool isThisWeek = IsInThisWeek(dateTime);
 
@@ -396,35 +507,41 @@ namespace diplom
                     animationTargetHeight = Math.Max(expandedHeight, targetPanel.Height);
                     RotateToggle(true);
                 }
+                // Update week section position after today section changes
+                UpdateWeekSectionPosition();
             }
-            else if (isThisWeek)
-            {
-                weekTaskItems.Add((dateTime, itemPanel));
-                if (weekTasksPanel != null)
-                {
-                    SortAndLayout(weekTasksPanel, weekTaskItems);
-                    weekTasksPanel.Visible = true;
-                }
-            }
+			else if (isThisWeek)
+			{
+				weekTaskItems.Add((dateTime, itemPanel));
+				if (weekTasksPanel != null)
+				{
+					SortAndLayout(weekTasksPanel, weekTaskItems);
+					weekTasksPanel.Visible = true;
+					UpdateWeekSectionPosition();
+				}
+			}
             else
             {
-                // Пока нет отдельной секции для дальних дат — показываем в неделе
+				// Пока нет отдельной секции для дальних дат — показываем в неделе
                 weekTaskItems.Add((dateTime, itemPanel));
                 if (weekTasksPanel != null)
                 {
                     SortAndLayout(weekTasksPanel, weekTaskItems);
                     weekTasksPanel.Visible = true;
+					UpdateWeekSectionPosition();
                 }
             }
 
-            // Keep in-memory list for local persistence
-            persistedTasks.Add(new TaskRecord { Title = title, DueAt = dateTime });
+			// Keep in-memory list for local persistence
+			persistedTasks.Add(new TaskRecord { Title = title, DueAt = dateTime, Completed = false });
 
-            // Persist to DB for current user unless we are loading from local storage
+			// Persist to DB for current user unless we are loading from local storage
             if (!isLoadingFromStorage)
             {
                 try { SaveTaskToDb(title, dateTime); } catch { /* ignore db errors for UI flow */ }
             }
+
+			UpdateEmptyStateUI();
         }
 
 		private void EditTaskForPanel(Panel itemPanel)
@@ -474,6 +591,7 @@ namespace diplom
 
 			// Move between lists if day changed
 			MoveOrResortItem(itemPanel, meta.DueAt);
+			UpdateWeekSectionPosition();
 
 			// Update persisted tasks (match by old values; may affect duplicates)
 			var existing = persistedTasks.FirstOrDefault(t => t.Title == meta.TitleLabel.Text && t.DueAt == meta.DueAt);
@@ -504,6 +622,27 @@ namespace diplom
 			catch { }
 		}
 
+		private void ToggleCompleteForPanel(Panel itemPanel)
+		{
+			if (itemPanel.Tag is not TaskItemMeta meta) return;
+			meta.Completed = !meta.Completed;
+			// Update visuals
+			meta.TitleLabel.Font = new Font(meta.TitleLabel.Font, meta.Completed ? FontStyle.Strikeout : FontStyle.Bold);
+			meta.TitleLabel.ForeColor = meta.Completed ? Color.Gray : SystemColors.ControlText;
+			itemPanel.BackColor = meta.Completed ? Color.LightGray : Color.Gainsboro;
+			// Update tooltip text
+			if (meta.CompleteCircle != null)
+			{
+				meta.CompleteCircle.Invalidate();
+				taskToolTip.SetToolTip(meta.CompleteCircle, meta.Completed ? "Снять завершение" : "Завершить задачу");
+			}
+
+			// Update persistence
+			var rec = persistedTasks.FirstOrDefault(t => t.Title == meta.Title && t.DueAt == meta.DueAt);
+			if (rec != null) rec.Completed = meta.Completed;
+			SaveTasksToLocal();
+		}
+
 		private void DeleteTaskForPanel(Panel itemPanel)
 		{
 			if (itemPanel.Tag is not TaskItemMeta meta) return;
@@ -531,11 +670,15 @@ namespace diplom
 			if (host == tasksPanel)
 			{
 				SortAndLayout(tasksPanel, todayTaskItems);
+				UpdateWeekSectionPosition();
 			}
 			else if (host == weekTasksPanel && weekTasksPanel != null)
 			{
 				SortAndLayout(weekTasksPanel, weekTaskItems);
+				UpdateWeekSectionPosition();
 			}
+
+			UpdateEmptyStateUI();
 		}
 
 		private void MoveOrResortItem(Panel itemPanel, DateTime newDueAt)
@@ -655,6 +798,78 @@ namespace diplom
             {
                 weekExpandedHeights[hostPanel] = hostPanel.Height;
             }
+            
+            // Update positions of "На этой неделе" section when "Сегодня" section changes
+            UpdateWeekSectionPosition();
+        }
+        
+		private void UpdateWeekSectionPosition()
+        {
+            if (tasksPanel == null || label2 == null || pictureBox4 == null || weekTasksPanel == null) return;
+            
+			// Decide where the week section should start
+			bool hasToday = todayTaskItems.Count > 0;
+			int spacing = 20; // Space between sections
+			int weekSectionTop;
+			
+			if (hasToday)
+			{
+				// Calculate the actual bottom of "Сегодня" section
+				// Need to find the lowest point: labelToday, pictureBoxToggle, or tasksPanel
+				int todaySectionBottom = 0;
+				
+				// Start with labelToday position
+				if (labelToday != null && labelToday.Visible)
+				{
+					todaySectionBottom = Math.Max(todaySectionBottom, labelToday.Bottom);
+				}
+				
+				// Check pictureBoxToggle
+				if (pictureBoxToggle != null && pictureBoxToggle.Visible)
+				{
+					todaySectionBottom = Math.Max(todaySectionBottom, pictureBoxToggle.Bottom);
+				}
+				
+				// Check tasksPanel (most important - it's the task list)
+				if (tasksPanel != null && tasksPanel.Visible && tasksPanel.Height > 0)
+				{
+					todaySectionBottom = Math.Max(todaySectionBottom, tasksPanel.Bottom);
+				}
+				
+				// If nothing was found, use default position
+				if (todaySectionBottom == 0)
+				{
+					todaySectionBottom = labelToday != null ? labelToday.Bottom : 130;
+				}
+				
+				// Position week section below today section with spacing
+				weekSectionTop = todaySectionBottom + spacing;
+			}
+			else
+			{
+				// No today tasks: place week section where today header usually starts
+				int todayHeaderTop = labelToday != null ? labelToday.Top : 96;
+				weekSectionTop = todayHeaderTop;
+				
+				// But ensure minimum position to avoid clipping at top
+				int minTop = 96; // Minimum Y position (same as labelToday default)
+				if (weekSectionTop < minTop)
+				{
+					weekSectionTop = minTop;
+				}
+			}
+			
+			// Apply positions - use same offset as in Designer (label2 Y + 10 = pictureBox4 Y)
+			label2.Location = new Point(label2.Location.X, weekSectionTop);
+			// Position triangle 10 pixels below label2 (same as in Designer: label2 at 206, pictureBox4 at 216)
+			int triangleTop = weekSectionTop + 10;
+			pictureBox4.Location = new Point(pictureBox4.Location.X, triangleTop);
+			// Ensure triangle is visible and not clipped
+			pictureBox4.BringToFront();
+			
+			// Position weekTasksPanel below the label
+			int weekPanelTop = weekSectionTop + label2.Height + 10;
+			weekTasksPanel.Location = new Point(weekTasksPanel.Location.X, weekPanelTop);
         }
 
         private static bool IsInThisWeek(DateTime date)
