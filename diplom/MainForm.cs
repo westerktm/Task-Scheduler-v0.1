@@ -51,6 +51,14 @@ namespace diplom
             public DateTime DueAt { get; set; }
         }
 
+		private class TaskItemMeta
+		{
+			public string Title { get; set; } = string.Empty;
+			public DateTime DueAt { get; set; }
+			public Label TitleLabel { get; set; } = null!;
+			public Label TimeLabel { get; set; } = null!;
+		}
+
         public MainForm()
         {
             InitializeComponent();
@@ -340,7 +348,7 @@ namespace diplom
 
             // Добавляем справа сначала время, затем (для недели) дату слева от него
             itemPanel.Controls.Add(timeLabel);
-            
+
             // Для задач не на сегодня показываем дату рядом со временем
             bool isToday = dateTime.Date == DateTime.Today;
             if (!isToday)
@@ -358,6 +366,19 @@ namespace diplom
             }
 
             itemPanel.Controls.Add(titleLabel);
+
+            // Attach context menu for edit/delete
+            var ctx = new ContextMenuStrip();
+            var editItem = new ToolStripMenuItem("Редактировать");
+            var deleteItem = new ToolStripMenuItem("Удалить");
+            editItem.Click += (s, e) => EditTaskForPanel(itemPanel);
+            deleteItem.Click += (s, e) => DeleteTaskForPanel(itemPanel);
+            ctx.Items.Add(editItem);
+            ctx.Items.Add(deleteItem);
+            itemPanel.ContextMenuStrip = ctx;
+
+            // Tag metadata
+            itemPanel.Tag = new TaskItemMeta { Title = title, DueAt = dateTime, TitleLabel = titleLabel, TimeLabel = timeLabel };
             isToday = dateTime.Date == DateTime.Today;
             bool isThisWeek = IsInThisWeek(dateTime);
 
@@ -405,6 +426,215 @@ namespace diplom
                 try { SaveTaskToDb(title, dateTime); } catch { /* ignore db errors for UI flow */ }
             }
         }
+
+		private void EditTaskForPanel(Panel itemPanel)
+		{
+			if (itemPanel.Tag is not TaskItemMeta meta) return;
+			string newTitle = meta.Title;
+			DateTime newDueAt = meta.DueAt;
+			if (!ShowEditTaskDialog(ref newTitle, ref newDueAt)) return;
+
+			// Update UI labels
+			meta.Title = newTitle;
+			meta.DueAt = newDueAt;
+			meta.TitleLabel.Text = newTitle;
+			meta.TimeLabel.Text = newDueAt.ToString("HH:mm");
+
+			// Update date label presence for non-today
+			bool isToday = newDueAt.Date == DateTime.Today;
+			var existingDateLabel = itemPanel.Controls
+				.OfType<Label>()
+				.FirstOrDefault(l => l != meta.TitleLabel && l != meta.TimeLabel && l.Dock == DockStyle.Right);
+			if (!isToday)
+			{
+				string dateText = newDueAt.ToString("dd.MM.yyyy");
+				if (existingDateLabel == null)
+				{
+					var dateLabel = new Label
+					{
+						AutoSize = true,
+						Font = new Font("Franklin Gothic Medium", 12F, FontStyle.Regular),
+						Text = dateText,
+						Dock = DockStyle.Right,
+						TextAlign = ContentAlignment.MiddleRight,
+						Padding = new Padding(0, 2, 12, 0)
+					};
+					itemPanel.Controls.Add(dateLabel);
+				}
+				else
+				{
+					existingDateLabel.Text = dateText;
+				}
+			}
+			else if (existingDateLabel != null)
+			{
+				itemPanel.Controls.Remove(existingDateLabel);
+				existingDateLabel.Dispose();
+			}
+
+			// Move between lists if day changed
+			MoveOrResortItem(itemPanel, meta.DueAt);
+
+			// Update persisted tasks (match by old values; may affect duplicates)
+			var existing = persistedTasks.FirstOrDefault(t => t.Title == meta.TitleLabel.Text && t.DueAt == meta.DueAt);
+			if (existing != null)
+			{
+				existing.Title = newTitle;
+				existing.DueAt = newDueAt;
+			}
+			else
+			{
+				// If not found by tag values, try loosest match by panel time label
+				var loose = persistedTasks.FirstOrDefault(t => t.Title == meta.Title && t.DueAt.ToString("HH:mm") == meta.TimeLabel.Text);
+				if (loose != null)
+				{
+					loose.Title = newTitle;
+					loose.DueAt = newDueAt;
+				}
+			}
+
+			SaveTasksToLocal();
+
+			// Best-effort DB update: delete old row and insert new
+			try
+			{
+				DeleteTaskFromDb(meta.Title, meta.DueAt);
+				SaveTaskToDb(newTitle, newDueAt);
+			}
+			catch { }
+		}
+
+		private void DeleteTaskForPanel(Panel itemPanel)
+		{
+			if (itemPanel.Tag is not TaskItemMeta meta) return;
+
+			// Remove from panel and lists
+			var host = itemPanel.Parent as Panel;
+			if (host != null)
+			{
+				host.Controls.Remove(itemPanel);
+			}
+			RemoveFromLists(itemPanel);
+
+			// Update persisted tasks
+			var idx = persistedTasks.FindIndex(t => t.Title == meta.Title && t.DueAt == meta.DueAt);
+			if (idx >= 0) persistedTasks.RemoveAt(idx);
+			SaveTasksToLocal();
+
+			// DB best-effort delete
+			try { DeleteTaskFromDb(meta.Title, meta.DueAt); } catch { }
+
+			// Dispose UI
+			itemPanel.Dispose();
+
+			// Relayout affected host
+			if (host == tasksPanel)
+			{
+				SortAndLayout(tasksPanel, todayTaskItems);
+			}
+			else if (host == weekTasksPanel && weekTasksPanel != null)
+			{
+				SortAndLayout(weekTasksPanel, weekTaskItems);
+			}
+		}
+
+		private void MoveOrResortItem(Panel itemPanel, DateTime newDueAt)
+		{
+			bool isToday = newDueAt.Date == DateTime.Today;
+			bool isThisWeek = IsInThisWeek(newDueAt);
+			var currentHost = itemPanel.Parent as Panel;
+			if (currentHost == null) return;
+
+			// Remove from both lists
+			RemoveFromLists(itemPanel);
+
+			// Add to appropriate list and host
+			Panel targetPanel = isToday ? (tasksPanel ?? currentHost) : (weekTasksPanel ?? currentHost);
+			if (currentHost != targetPanel)
+			{
+				currentHost.Controls.Remove(itemPanel);
+				targetPanel.Controls.Add(itemPanel);
+			}
+
+			if (isToday)
+			{
+				todayTaskItems.Add((newDueAt, itemPanel));
+				SortAndLayout(targetPanel, todayTaskItems);
+				targetPanel.Visible = true;
+			}
+			else if (isThisWeek)
+			{
+				weekTaskItems.Add((newDueAt, itemPanel));
+				if (weekTasksPanel != null)
+				{
+					SortAndLayout(weekTasksPanel, weekTaskItems);
+					weekTasksPanel.Visible = true;
+				}
+			}
+			else
+			{
+				weekTaskItems.Add((newDueAt, itemPanel));
+				if (weekTasksPanel != null)
+				{
+					SortAndLayout(weekTasksPanel, weekTaskItems);
+					weekTasksPanel.Visible = true;
+				}
+			}
+		}
+
+		private void RemoveFromLists(Panel itemPanel)
+		{
+			int idx = todayTaskItems.FindIndex(x => x.Panel == itemPanel);
+			if (idx >= 0) todayTaskItems.RemoveAt(idx);
+			idx = weekTaskItems.FindIndex(x => x.Panel == itemPanel);
+			if (idx >= 0) weekTaskItems.RemoveAt(idx);
+		}
+
+		private bool ShowEditTaskDialog(ref string title, ref DateTime dueAt)
+		{
+			using (var dlg = new Form())
+			{
+				dlg.Text = "Редактирование задачи";
+				dlg.FormBorderStyle = FormBorderStyle.FixedDialog;
+				dlg.StartPosition = FormStartPosition.CenterParent;
+				dlg.MinimizeBox = false;
+				dlg.MaximizeBox = false;
+				dlg.ClientSize = new Size(420, 180);
+
+				var titleBox = new TextBox { Left = 16, Top = 20, Width = 380, Text = title };
+				var timePicker = new DateTimePicker { Left = 16, Top = 60, Width = 180, Format = DateTimePickerFormat.Custom, CustomFormat = "dd.MM.yyyy HH:mm", Value = dueAt };
+				var okBtn = new Button { Text = "OK", Left = 230, Width = 75, Top = 120, DialogResult = DialogResult.OK };
+				var cancelBtn = new Button { Text = "Отмена", Left = 321, Width = 75, Top = 120, DialogResult = DialogResult.Cancel };
+				dlg.Controls.Add(titleBox);
+				dlg.Controls.Add(timePicker);
+				dlg.Controls.Add(okBtn);
+				dlg.Controls.Add(cancelBtn);
+				dlg.AcceptButton = okBtn;
+				dlg.CancelButton = cancelBtn;
+
+				if (dlg.ShowDialog(this) == DialogResult.OK)
+				{
+					if (string.IsNullOrWhiteSpace(titleBox.Text)) return false;
+					title = titleBox.Text.Trim();
+					dueAt = timePicker.Value;
+					return true;
+				}
+			}
+			return false;
+		}
+
+		private void DeleteTaskFromDb(string title, DateTime dueAt)
+		{
+			DB db = new DB();
+			using var cmd = new MySqlConnector.MySqlCommand("DELETE FROM tasks WHERE user_id=@uid AND title=@t AND due_at=@d LIMIT 1", db.getConnection());
+			cmd.Parameters.AddWithValue("@uid", currentUserId);
+			cmd.Parameters.AddWithValue("@t", title);
+			cmd.Parameters.AddWithValue("@d", dueAt);
+			db.openConnection();
+			cmd.ExecuteNonQuery();
+			db.closeConnection();
+		}
+        
 
         private void SortAndLayout(Panel hostPanel, List<(DateTime Time, Panel Panel)> items)
         {
