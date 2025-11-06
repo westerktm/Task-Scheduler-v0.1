@@ -4,6 +4,7 @@ using System.Linq;
 using System.Windows.Forms;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Drawing.Drawing2D;
 
 namespace diplom
 {
@@ -23,6 +24,7 @@ namespace diplom
             mainForm = owner;
             userId = mainForm.UserId;
             LoadAvatar();
+            LoadUserLogin();
         }
         
         private string AvatarPath
@@ -57,6 +59,45 @@ namespace diplom
                 // Можно залогировать ошибку для отладки
                 System.Diagnostics.Debug.WriteLine($"Ошибка загрузки аватарки: {ex.Message}");
             }
+        }
+        
+        private void LoadUserLogin()
+        {
+            try
+            {
+                if (mainForm != null && !string.IsNullOrEmpty(mainForm.UserLogin))
+                {
+                    loginLabel.Text = mainForm.UserLogin;
+                    ApplyRoundedRegion(loginPanel, 12);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Ошибка загрузки логина: {ex.Message}");
+            }
+        }
+        
+        private static void ApplyRoundedRegion(Control? control, int radius)
+        {
+            if (control == null) return;
+            control.Resize += (_, __) => UpdateRoundedRegion(control, radius);
+            UpdateRoundedRegion(control, radius);
+        }
+        
+        private static void UpdateRoundedRegion(Control control, int radius)
+        {
+            var rect = new Rectangle(0, 0, control.Width, control.Height);
+            using var path = new GraphicsPath();
+            int d = radius * 2;
+            path.StartFigure();
+            path.AddArc(new Rectangle(rect.X, rect.Y, d, d), 180, 90);
+            path.AddArc(new Rectangle(rect.Right - d, rect.Y, d, d), 270, 90);
+            path.AddArc(new Rectangle(rect.Right - d, rect.Bottom - d, d, d), 0, 90);
+            path.AddArc(new Rectangle(rect.X, rect.Bottom - d, d, d), 90, 90);
+            path.CloseFigure();
+            var oldRegion = control.Region;
+            control.Region = new Region(path);
+            oldRegion?.Dispose();
         }
         
         private void SaveAvatar(Image image)
@@ -104,19 +145,7 @@ namespace diplom
                     }
                 }
                 
-                // Обновляем аватарку в MainForm, если она есть
-                if (mainForm != null && !mainForm.IsDisposed)
-                {
-                    var pictureBox2 = mainForm.Controls.Find("pictureBox2", true).FirstOrDefault() as PictureBox;
-                    if (pictureBox2 != null)
-                    {
-                        pictureBox2.Image?.Dispose();
-                        if (File.Exists(AvatarPath))
-                        {
-                            pictureBox2.Image = new Bitmap(AvatarPath);
-                        }
-                    }
-                }
+                // Не обновляем аватар в MainForm немедленно, чтобы аватарка в MainForm не менялась
             }
             catch (Exception ex)
             {
